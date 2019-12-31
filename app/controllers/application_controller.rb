@@ -13,7 +13,7 @@ class ApplicationController < ActionController::Base
   def save_request
   	@jsonBody = JSON.parse(request.body.read)
   rescue
-  	raise 'Wring format'
+  	raise 'Wrong format'
   	# Log.new(uuid: request.uuid, path: request.path, body: request.body.read[0...200], request_time: Time.now).save
   end
 

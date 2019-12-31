@@ -11,6 +11,7 @@ class Bs::Customer < ActiveRecord::Base
   self.primary_key = :custkey
 
   belongs_to :address,      class_name: 'Bs::Address',       foreign_key: :premisekey
+  has_one    :taxid,        class_name: 'Bs::CustomerId',    foreign_key: :custkey
   belongs_to :send_address, class_name: 'Billing::Address',       foreign_key: :sendkey
   has_one  :trash_customer, class_name: 'Billing::TrashCustomer', foreign_key: :custkey
   has_one  :water_customer, class_name: 'Billing::WaterCustomer', foreign_key: :custkey

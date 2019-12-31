@@ -10,16 +10,23 @@ class ServiceController < ApplicationController
   
  def getSubscriberByPhone
  	phoneNumber = @jsonBody["phoneNumber"]
- 	customer = Bs::Customer.where(fax: phoneNumber).first
- 	if customer.blank?
-	  ceb = Bs::CustomerElBill.where(mobile: phoneNumber).first
-	  customer = Bs::Customer.find(ceb.custkey) if ceb.present?
-	end
-	if customer.present?
-	 	render json: { errorCode: 0,
-					   SubscriberID: customer.accnumb,
-					   currentStatus: customer.status[0] ? 1 : 0,
-					   balance: customer.payable_balance }
+ 	customers = Bs::Customer.where(fax: phoneNumber)
+ 	customer_faxs = Bs::CustomerFax.where('SUBSTR(fax, -9, 9) = ?', phoneNumber)
+	if customers.present? || customer_faxs.present?
+		renderedJson = []
+		customers.each do |customer|
+			renderedJson << { errorCode: 0,
+							  SubscriberID: customer.accnumb,
+							  currentStatus: customer.status[0] ? 1 : 0,
+							  balance: customer.payable_balance }
+		end
+		customer_faxs.each do |customer|
+			renderedJson << { errorCode: 0,
+							  SubscriberID: customer.accnumb,
+							  currentStatus: customer.status[0] ? 1 : 0,
+							  balance: customer.payable_balance }
+		end
+	 	render json: renderedJson
 	else
 		render json: { errorCode: -1,
 					   SubscriberID: "",
@@ -33,6 +40,7 @@ class ServiceController < ApplicationController
  	customer = Bs::Customer.where(accnumb: subscriberID).first
  	raise "Customer not found" if customer.blank?
  	updateFaxAndSender(customer, phoneNumber)
+ 	ActiveRecord::Base.connection.execute("BEGIN sms.sms_pack.send__bill_notif_sms_proc_ussd('#{subscriberID}', '#{phoneNumber}'); end;")
  	render json: { errorCode: 0 }
  end
 
@@ -69,12 +77,24 @@ class ServiceController < ApplicationController
  	customer = Bs::Customer.where(accnumb: subscriberID).first
  	if customer.blank?
  		render json: { errorCode: -1,
-					   errorMessage: "" }
+			   	       errorMessage: "" }
+ 	elsif Bs::CustomerId.where(custkey: customer.custkey, customer_id: personalID).blank?
+ 		render json: { errorCode: -2,
+			   	       errorMessage: "" }
+ 	else
+ 		fax = Bs::CustomerFax.where('SUBSTR(fax, -9, 9) = ?', phoneNumber)
+ 		Bs::CustomerFax.new(custkey:    customer.custkey,
+ 							fax:        "995#{phoneNumber}",
+ 							parent_fax: customer.fax ).save if fax.blank?
+
+ 		Bs::CustomerCandidate.new(accnumb:    customer.accnumb, 
+								  phone:      phoneNumber,
+								  fax:        customer.fax,
+								  status:  	  'U',
+								  enter_date: Time.now).save
+ 		render json: { errorCode: 0,
+			   	       errorMessage: "" }
  	end
- 	
-
-
- 	render json: { errorCode: 0 }
  end
 
  def removePhoneNumber
@@ -82,6 +102,8 @@ class ServiceController < ApplicationController
  	subscriberID = @jsonBody["subscriberID"]
  	customer = Bs::Customer.where(accnumb: subscriberID).first
  	raise "Customer not found" if customer.blank?
+ 	customerFax = CustomerFax.where('SUBSTR(fax, -9, 9) = ?', phoneNumber).first
+	customerFax.update_attributes!(message_status: 'C') if customer_fax.present?
  	ceb = Bs::CustomerElBill.where(accnumb: subscriberID, mobile: phoneNumber).first
  	ceb.update_attributes!(sms: SMS_OFF) if ceb.present?
  end
@@ -92,15 +114,14 @@ class ServiceController < ApplicationController
  	raise "Customer not found" if customer.blank?
  	render json: { errorCode: 0,
  				   mainNumber: customer.fax,
- 				   alternativeNumber: Bs::CustomerElBill.where(accnumb: subscriberID).map{ |x| x.mobile }.join(',') }
+ 				   alternativeNumber: Bs::CustomerFax.where(parent_fax: customer.fax).map{ |x| x.fax }.join(',') }
  end
 
  private 
 
  def updateFaxAndSender(customer, phoneNumber)
  	Bs::Customer.transaction do 
-	 	customer.fax = phoneNumber
-	 	customer.save
+ 		updateFax(customer, phoneNumber)
 	 	ceb = Bs::CustomerElBill.where(accnumb: customer.accnumb).first || Bs::CustomerElBill.new(accnumb: customer.accnumb)
 	 	ceb.custname 	= customer.custname
 	 	ceb.custname_en = customer.custname
@@ -116,8 +137,7 @@ class ServiceController < ApplicationController
 
  def updateFaxAndSendLast(customer, phoneNumber)
  	Bs::Customer.transaction do 
-	 	customer.fax = phoneNumber
-	 	customer.save
+ 		# updateFax(customer, phoneNumber)
 	 	sent_message = Bs::SentMessages.where(receiver_mobile: phoneNumber).first
 	 	raise 'No message' if sent_message.blank?
 	 	sms = Bs::SmsMessages.new(company:  	   COMPANY, 
@@ -128,6 +148,17 @@ class ServiceController < ApplicationController
 		 						  message_status:  MESSAGE_STATUS )
 	 	sms.save
  	end
+ end
+
+ def updateFax(customer, phoneNumber)
+ 	customer.fax = phoneNumber
+	customer.save
+
+	Bs::CustomerCandidate.new(accnumb:    customer.accnumb, 
+							  phone:      phoneNumber,
+							  fax:        customer.fax,
+							  status:  	  'U',
+							  enter_date: Time.now).save
  end
   
 end

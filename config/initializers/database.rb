@@ -9,5 +9,6 @@ Bs::Payment.establish_connection :bs
 Bs::CustomerFax.establish_connection :bs
 Bs::SmsMessages.establish_connection :bs
 Bs::CustomerElBill.establish_connection :bs
+Bs::CustomerId.establish_connection :bs
 
 Bs::CutHistory.establish_connection :report_bs

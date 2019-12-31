@@ -3,5 +3,10 @@ class Bs::CutHistory < ActiveRecord::Base
   self.establish_connection :report_bs
 
   self.table_name  = 'bs.cut_history'
-  self.set_integer_columns :mark_code, :oper_code, :mark_code_insp, :upload_status, :upload_numb
+
+  attribute :mark_code, :integer
+  attribute :oper_code, :integer
+  attribute :mark_code_insp, :integer
+  attribute :upload_status, :integer
+  attribute :upload_numb, :integer
 end
