@@ -1,4 +1,5 @@
 require File.expand_path('../boot', __FILE__)
+ENV['NLS_LANG'] = '.UTF8'
 
 require 'rails/all'
 
@@ -24,6 +25,7 @@ module Ussd
     # config.active_record.raise_in_transactional_callbacks = true
 
     config.autoload_paths += %W(#{config.root}/lib)
+    config.autoload_paths += %W(#{config.root}/lib/error/helpers)
     config.exceptions_app = routes
   end
 end
