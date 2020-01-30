@@ -11,7 +11,9 @@ class ApplicationController < ActionController::Base
   private 
 
   def save_request
-  	@jsonBody = JSON.parse(request.body.read)
+    if request.post?
+  	 @jsonBody = JSON.parse(request.body.read)
+    end
   rescue
   	raise 'Wrong format'
   	# Log.new(uuid: request.uuid, path: request.path, body: request.body.read[0...200], request_time: Time.now).save

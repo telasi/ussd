@@ -9,28 +9,22 @@ class ServiceController < ApplicationController
  TELASI_WEB_SITE = 'www.telasi.ge'
   
  def getSubscriberByPhone
- 	phoneNumber = @jsonBody["phoneNumber"]
+ 	phoneNumber = params["phoneNumber"]
+ 	raise Error::SubscriberNotFoundError.new if phoneNumber.blank?
+ 	phoneNumber = phoneNumber.delete(' ')
  	customers = Bs::Customer.where(fax: phoneNumber)
  	customer_faxs = Bs::CustomerFax.where('SUBSTR(fax, -9, 9) = ?', phoneNumber)
 	if customers.present? || customer_faxs.present?
-		renderedJson = []
+		renderedJson = { subscribers: [] }
 		customers.each do |customer|
-			renderedJson << { errorCode: 0,
-							  SubscriberID: customer.accnumb,
-							  currentStatus: customer.status[0] ? 1 : 0,
-							  balance: customer.payable_balance }
+			renderedJson[:subscribers] << customer_hash(customer)
 		end
 		customer_faxs.each do |customer|
-			renderedJson << { errorCode: 0,
-							  SubscriberID: customer.accnumb,
-							  currentStatus: customer.status[0] ? 1 : 0,
-							  balance: customer.payable_balance }
+			renderedJson[:subscribers] << customer_hash(customer)
 		end
 	 	render json: renderedJson
 	else
-		render json: { errorCode: -1,
-					   SubscriberID: "",
-					   currentStatus: 0 }
+		raise Error::SubscriberNotFoundError.new
 	end
  end
 
@@ -118,6 +112,20 @@ class ServiceController < ApplicationController
  end
 
  private 
+
+ def customer_hash(customer)
+ 	status, message = customer.status
+	{ 	SubscriberID: customer.accnumb,
+	    currentStatus: status ? 1 : -1,
+	    balance: customer.payable_balance,
+	    message: message,
+	    address: customer.address.region.address,
+	    phoneNumber: [ customer.address.region.phone ],
+	    webAddress: TELASI_WEB_SITE,
+	    mainNumber: customer.fax,
+	    alternativeNumber: Bs::CustomerFax.where(parent_fax: customer.fax).map{ |x| x.fax }
+	}
+ end
 
  def updateFaxAndSender(customer, phoneNumber)
  	Bs::Customer.transaction do 

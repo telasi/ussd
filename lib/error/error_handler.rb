@@ -3,17 +3,15 @@ module Error
     def self.included(clazz)
       clazz.class_eval do
         rescue_from StandardError do |e|
-          # respond(:standard_error, 500, e.to_s)
-          render json: { errorCode: -1,
-                         errorMessage: e.to_s }             
+          respond(e, 404)
         end
       end
     end
 
     private
 
-    def respond(_error, _status, _message)
-      json = Helpers::Render.json(_error, _status, _message)
+    def respond(_error, _status)
+      json = Helpers::Render.json(_error)
       render json: json, status: _status      
     end
   end

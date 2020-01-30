@@ -1,7 +1,7 @@
 Rails.application.routes.draw do
 
   scope '/', controller: 'service' do
-    post '/getSubscriberByPhone', action: 'getSubscriberByPhone'
+    get '/getSubscriberByPhone', action: 'getSubscriberByPhone'
     post '/sendDigitalReceipt', action: 'sendDigitalReceipt'
     post '/getServiceSuspendReason', action: 'getServiceSuspendReason'
     post '/resendLastSMS', action: 'resendLastSMS'
