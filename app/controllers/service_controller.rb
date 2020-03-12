@@ -9,9 +9,8 @@ class ServiceController < ApplicationController
  TELASI_WEB_SITE = 'www.telasi.ge'
   
  def getSubscriberByPhone
- 	phoneNumber = params["phoneNumber"]
- 	raise Error::SubscriberNotFoundError.new if phoneNumber.blank?
- 	phoneNumber = phoneNumber.delete(' ')
+ 	phoneNumber = params["phoneNumber"] || ''
+ 	raise Error::SubscriberNotFoundError.new unless valid?(phoneNumber)
  	customers = Bs::Customer.where(fax: phoneNumber)
  	customer_faxs = Bs::CustomerFax.where('SUBSTR(fax, -9, 9) = ?', phoneNumber)
 	if customers.present? || customer_faxs.present?
@@ -19,7 +18,8 @@ class ServiceController < ApplicationController
 		customers.each do |customer|
 			renderedJson[:subscribers] << customer_hash(customer)
 		end
-		customer_faxs.each do |customer|
+		customer_faxs.each do |customer_fax|
+			customer = Bs::Customer.find(customer_fax.custkey)
 			renderedJson[:subscribers] << customer_hash(customer)
 		end
 	 	render json: renderedJson
@@ -30,6 +30,8 @@ class ServiceController < ApplicationController
 
  def sendDigitalReceipt
  	phoneNumber = @jsonBody["phoneNumber"]
+ 	raise Error::SubscriberNotFoundError.new unless valid?(phoneNumber)
+
  	subscriberID = @jsonBody["subscriberID"]
  	customer = Bs::Customer.where(accnumb: subscriberID).first
  	raise "Customer not found" if customer.blank?
@@ -40,6 +42,8 @@ class ServiceController < ApplicationController
 
  def getServiceSuspendReason
  	subscriberID = @jsonBody["subscriberID"]
+ 	raise Error::SubscriberNotFoundError.new unless in_subscriber_whitelist(subscriberID)
+
  	customer = Bs::Customer.where(accnumb: subscriberID).first
  	raise "Customer not found" if customer.blank?
  	render json: { subscriberID: subscriberID,
@@ -48,6 +52,8 @@ class ServiceController < ApplicationController
 
  def resendLastSMS
  	phoneNumber = @jsonBody["phoneNumber"]
+ 	raise Error::SubscriberNotFoundError.new unless valid?(phoneNumber)
+
  	subscriberID = @jsonBody["subscriberID"]
  	customer = Bs::Customer.where(accnumb: subscriberID).first
  	raise "Customer not found" if customer.blank?
@@ -57,6 +63,8 @@ class ServiceController < ApplicationController
 
  def getCompanyContacts
  	subscriberID = @jsonBody["subscriberID"]
+ 	raise Error::SubscriberNotFoundError.new unless in_subscriber_whitelist(subscriberID)
+
  	customer = Bs::Customer.where(accnumb: subscriberID).first
  	raise "Customer not found" if customer.blank?
  	render json: { address: 	customer.address.region.address,
@@ -66,6 +74,8 @@ class ServiceController < ApplicationController
 
  def addNewSubscriber
  	phoneNumber = @jsonBody["phoneNumber"]
+	raise Error::SubscriberNotFoundError.new unless valid?(phoneNumber)
+
  	subscriberID = @jsonBody["subscriberID"]
  	personalID = @jsonBody["personalID"]
  	customer = Bs::Customer.where(accnumb: subscriberID).first
@@ -83,6 +93,7 @@ class ServiceController < ApplicationController
 
  		Bs::CustomerCandidate.new(accnumb:    customer.accnumb, 
 								  phone:      phoneNumber,
+								  taxid:      personalID,
 								  fax:        customer.fax,
 								  status:  	  'U',
 								  enter_date: Time.now).save
@@ -93,6 +104,8 @@ class ServiceController < ApplicationController
 
  def removePhoneNumber
  	phoneNumber = @jsonBody["phoneNumber"]
+	raise Error::SubscriberNotFoundError.new unless valid?(phoneNumber)
+
  	subscriberID = @jsonBody["subscriberID"]
  	customer = Bs::Customer.where(accnumb: subscriberID).first
  	raise "Customer not found" if customer.blank?
@@ -104,6 +117,8 @@ class ServiceController < ApplicationController
 
  def getSubscriberContactPhones
  	subscriberID = @jsonBody["subscriberID"]
+ 	raise Error::SubscriberNotFoundError.new unless in_subscriber_whitelist(subscriberID)
+
  	customer = Bs::Customer.where(accnumb: subscriberID).first
  	raise "Customer not found" if customer.blank?
  	render json: { errorCode: 0,
@@ -113,14 +128,46 @@ class ServiceController < ApplicationController
 
  private 
 
+ def valid?(phoneNumber)
+ 	phoneNumber = phoneNumber.delete(' ')
+ 	return false if phoneNumber.blank?
+ 	return false if in_blacklist(phoneNumber)
+ 	return true  if in_whitelist(phoneNumber)
+ 	return false
+ end
+
+ def in_whitelist(phoneNumber)
+ 	[
+ 	'577783120',
+ 	'593721880', 
+ 	'599294156',
+ 	'593666598',
+ 	'599552440',
+ 	'551234234',
+ 	].include?(phoneNumber)
+ end
+
+ def in_blacklist(phoneNumber)
+ 	false
+ end
+
+ def in_subscriber_whitelist(subscriber)
+ 	customer = Bs::Customer.where(accnumb: subscriber).first
+ 	customer.present? && customer.fax.present? && in_whitelist(customer.fax)
+ end
+
  def customer_hash(customer)
+ 	due_date = ""
+ 	bill_notif = Bs::CustomerBillNotification.where(accnumb: customer.accnumb).first
+ 	due_date = bill_notif.lastday if bill_notif.present?
  	status, message = customer.status
-	{ 	SubscriberID: customer.accnumb,
+	{ 	subscriberID: customer.accnumb,
 	    currentStatus: status ? 1 : -1,
-	    balance: customer.payable_balance,
+	    balance: (customer.payable_balance * -100).to_i,
+	    dueDate:  due_date,
 	    message: message,
 	    address: customer.address.region.address,
-	    phoneNumber: [ customer.address.region.phone ],
+	    phoneNumber: [ customer.address.region.phone || '' ],
 	    webAddress: TELASI_WEB_SITE,
 	    mainNumber: customer.fax,
 	    alternativeNumber: Bs::CustomerFax.where(parent_fax: customer.fax).map{ |x| x.fax }
@@ -129,7 +176,7 @@ class ServiceController < ApplicationController
 
  def updateFaxAndSender(customer, phoneNumber)
  	Bs::Customer.transaction do 
- 		updateFax(customer, phoneNumber)
+ 		# updateFax(customer, phoneNumber)
 	 	ceb = Bs::CustomerElBill.where(accnumb: customer.accnumb).first || Bs::CustomerElBill.new(accnumb: customer.accnumb)
 	 	ceb.custname 	= customer.custname
 	 	ceb.custname_en = customer.custname
@@ -146,13 +193,17 @@ class ServiceController < ApplicationController
  def updateFaxAndSendLast(customer, phoneNumber)
  	Bs::Customer.transaction do 
  		# updateFax(customer, phoneNumber)
-	 	sent_message = Bs::SentMessages.where(receiver_mobile: phoneNumber).first
-	 	raise 'No message' if sent_message.blank?
+ 		mobile = "995#{phoneNumber}"
+	 	# sent_message = Bs::SentMessages.where(receiver_mobile: mobile).first
+	 	# if sent_message.blank?
+	 	#   sent_message = Bs::SentMessagesArch.where(receiver_mobile: mobile).first
+	 	# end
+	 	# raise 'No message' if sent_message.blank?
 	 	sms = Bs::SmsMessages.new(company:  	   COMPANY, 
-		 						  sender_mobile:   phoneNumber,
-		 						  text: 		   sent_message.text,
+		 						  sender_mobile:   mobile,
+		 						  text: 		   '111',
 		 						  receiver_mobile: RECEIVER_MOBILE,
-		 						  message_type:    LAST_MESSAGE, 
+		 						  # message_type:    LAST_MESSAGE, 
 		 						  message_status:  MESSAGE_STATUS )
 	 	sms.save
  	end
@@ -162,11 +213,11 @@ class ServiceController < ApplicationController
  	customer.fax = phoneNumber
 	customer.save
 
-	Bs::CustomerCandidate.new(accnumb:    customer.accnumb, 
-							  phone:      phoneNumber,
-							  fax:        customer.fax,
-							  status:  	  'U',
-							  enter_date: Time.now).save
+	# Bs::CustomerCandidate.new(accnumb:    customer.accnumb, 
+	# 						  phone:      phoneNumber,
+	# 						  fax:        customer.fax,
+	# 						  status:  	  'U',
+	# 						  enter_date: Time.now).save
  end
   
 end

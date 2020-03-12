@@ -9,7 +9,7 @@ class Bs::Region < ActiveRecord::Base
     location = self.location
     if location
       a = self.location.split('T')[0]
-      a && a.to_ka.gsub('N', '№').gsub(',', ', ').gsub('.', '. ')
+      a && a.bs_str_to_en.gsub('N', '№').gsub(',', ', ').gsub('.', '. ')
     end
   end
 
@@ -17,7 +17,7 @@ class Bs::Region < ActiveRecord::Base
     location = self.location
     if location
       p = self.location.split('T')[1]
-      p && p.to_ka.gsub(',', ', ')
+      p && p.bs_str_to_en.gsub(',', ', ')
     end
   end
 

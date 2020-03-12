@@ -1,5 +1,16 @@
 Rails.application.routes.draw do
 
+  scope 'api/ussd/', controller: 'service' do
+    get '/getSubscriberByPhone', action: 'getSubscriberByPhone'
+    post '/sendDigitalReceipt', action: 'sendDigitalReceipt'
+    post '/getServiceSuspendReason', action: 'getServiceSuspendReason'
+    post '/resendLastSMS', action: 'resendLastSMS'
+    post '/getCompanyContacts', action: 'getCompanyContacts'
+    post '/addNewSubscriber', action: 'addNewSubscriber'
+    post '/removePhoneNumber', action: 'removePhoneNumber'
+    post '/getSubscriberContactPhones', action: 'getSubscriberContactPhones'
+  end
+
   scope '/', controller: 'service' do
     get '/getSubscriberByPhone', action: 'getSubscriberByPhone'
     post '/sendDigitalReceipt', action: 'sendDigitalReceipt'

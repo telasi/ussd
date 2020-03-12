@@ -1,6 +1,6 @@
 # -*- encoding : utf-8 -*-
 class Bs::Payment < ActiveRecord::Base
-  self.establish_connection :bs
+  #self.establish_connection :bs
   
   self.table_name  = 'payments.payment'
   self.primary_key = :paykey

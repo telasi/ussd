@@ -199,17 +199,17 @@ class Bs::Customer < ActiveRecord::Base
 private
 
   def pre_payments
-    Bs::Payment.where('paydate > ? AND custkey = ? AND status IN (0, 1)', 7.days.ago, self.custkey)
+    Bs::Payment.where('paydate > ? AND custkey = ? AND status IN (0, 1)', 7.days.ago.to_date, self.custkey)
   end
 
 
   def pre_trash_payments
-    Billing::TrashPayment.where('paydate>? AND custkey=? AND status IN (0, 1)', 7.days.ago, self.custkey)
+    Billing::TrashPayment.where('paydate>? AND custkey=? AND status IN (0, 1)', 7.days.ago.to_date, self.custkey)
   end
 
 
   def pre_water_payments
-    Billing::WaterPayment.where('paydate>? AND custkey=? AND status IN (0, 1)', 7.days.ago, self.custkey)
+    Billing::WaterPayment.where('paydate>? AND custkey=? AND status IN (0, 1)', 7.days.ago.to_date, self.custkey)
   end
 
   def self.tps
