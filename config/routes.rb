@@ -9,6 +9,7 @@ Rails.application.routes.draw do
     post '/addNewSubscriber', action: 'addNewSubscriber'
     post '/removePhoneNumber', action: 'removePhoneNumber'
     post '/getSubscriberContactPhones', action: 'getSubscriberContactPhones'
+    post '/getMeterList', action: 'getMeterList'
   end
 
   scope '/', controller: 'service' do
@@ -20,6 +21,7 @@ Rails.application.routes.draw do
     post '/addNewSubscriber', action: 'addNewSubscriber'
     post '/removePhoneNumber', action: 'removePhoneNumber'
     post '/getSubscriberContactPhones', action: 'getSubscriberContactPhones'
+    post '/getMeterList', action: 'getMeterList'
   end
 
   # The priority is based upon order of creation: first created -> highest priority.

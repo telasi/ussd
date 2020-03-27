@@ -113,6 +113,8 @@ class ServiceController < ApplicationController
 	customerFax.update_attributes!(message_status: 'C') if customer_fax.present?
  	ceb = Bs::CustomerElBill.where(accnumb: subscriberID, mobile: phoneNumber).first
  	ceb.update_attributes!(sms: SMS_OFF) if ceb.present?
+ 	cc = Bs::CustomerCandidate.where(accnumb: subscriberID).first
+ 	cc.update_attributes!(status: 'D') if cc.present?
  end
 
  def getSubscriberContactPhones
@@ -124,6 +126,18 @@ class ServiceController < ApplicationController
  	render json: { errorCode: 0,
  				   mainNumber: customer.fax,
  				   alternativeNumber: Bs::CustomerFax.where(parent_fax: customer.fax).map{ |x| x.fax }.join(',') }
+ end
+
+
+ def getMeterList
+ 	subscriberID = @jsonBody["subscriberID"]
+ 	raise Error::SubscriberNotFoundError.new unless in_subscriber_whitelist(subscriberID)
+
+ 	customer = Bs::Customer.where(accnumb: subscriberID).first
+ 	raise "Customer not found" if customer.blank?
+
+ 	render json: { meterList: Bs::Account.where(custkey: customer.custkey).map{ |x| x.mtnumb }.to_a,
+ 				   errorCode: 0 }
  end
 
  private 
@@ -144,6 +158,7 @@ class ServiceController < ApplicationController
  	'593666598',
  	'599552440',
  	'551234234',
+ 	'599482211'
  	].include?(phoneNumber)
  end
 
