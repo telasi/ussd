@@ -83,9 +83,9 @@ class ServiceController < ApplicationController
  	if customer.blank?
  		render json: { errorCode: -1,
 			   	       errorMessage: "" }
- 	elsif Bs::CustomerId.where(custkey: customer.custkey, customer_id: personalID).blank?
- 		render json: { errorCode: -2,
-			   	       errorMessage: "" }
+ 	# elsif Bs::CustomerId.where(custkey: customer.custkey, customer_id: personalID).blank?
+ 	# 	render json: { errorCode: -2,
+		# 	   	       errorMessage: "" }
  	else
  		Bs::CustomerCandidate.new(accnumb:    customer.accnumb, 
 								  phone:      phoneNumber,
@@ -94,10 +94,10 @@ class ServiceController < ApplicationController
 								  status:  	  'A',
 								  enter_date: Time.now).save
 
- 		fax = Bs::CustomerFax.where('SUBSTR(fax, -9, 9) = ?', phoneNumber)
- 		Bs::CustomerFax.new(custkey:    customer.custkey,
- 							fax:        "995#{phoneNumber}",
- 							parent_fax: customer.fax ).save if fax.blank?
+ 		# fax = Bs::CustomerFax.where('SUBSTR(fax, -9, 9) = ?', phoneNumber)
+ 		# Bs::CustomerFax.new(custkey:    customer.custkey,
+ 		# 					fax:        "995#{phoneNumber}",
+ 		# 					parent_fax: customer.fax ).save if fax.blank?
 
  		customer.update_attributes!(fax: phoneNumber)
  		

@@ -4,4 +4,8 @@ class Bs::OutageJournalCust < ActiveRecord::Base
   self.primary_key = :custkey_customer
 
   belongs_to :detail, class_name: 'Bs::OutageJournalDet', foreign_key: :journal_det_id
+  belongs_to :journal, class_name: 'Bs::OutageJournal', foreign_key: :off_id, primary_key: :off_id
+
+  scope :accepted, ->() { joins(:journal).where("OFF_DTIME < TO_DATE('2020-01-01', 'YYYY-MM-DD') AND IS_GIS IN ('ki', 'ara')") }
+  scope :open, ->() { joins(:detail).where('outage_journal_det.ON_TIME is NULL') }
 end

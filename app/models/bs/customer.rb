@@ -34,18 +34,19 @@ class Bs::Customer < ActiveRecord::Base
     status = true
     reason = ''
 
-    ch = Bs::CutHistory.where(custkey: self.custkey).order('cr_key desc').first
+    ch = Bs::CutHistory.where(custkey: self.custkey).where('OPER_DATE >= SYSDATE - 7').order('cr_key desc').first
     if ch && ch.oper_code == 0
      status = false
      reason = 'payment'
     end
 
-    outage = Bs::OutageJournalCust.where(custkey_customer: self.custkey).first
-    if outage.present? && outage.detail.present?
-      if outage.detail.enabled != 1 || outage.detail.on_time.blank?
-        status = false
-        reason = outage.detail.type_descr
-      end
+    outage = Bs::OutageJournalCust.where(custkey_customer: self.custkey).open.accepted.any?
+    if outage.present?
+    # if outage.present? && outage.detail.present?
+    #   if outage.detail.enabled != 1 || outage.detail.on_time.blank?
+         status = false
+         reason = outage.detail.type_descr
+       # end
     end
 
     return [status, reason]
