@@ -5,11 +5,16 @@ class Bs::Customer < ActiveRecord::Base
   INACTIVE = 1
   CLOSED = 2
 
+  TELASI_WEB_SITE = 'www.telasi.ge'
+
   XXX = 'xxx-qs'
 
   self.table_name  = 'bs.customer'
   self.primary_key = :custkey
 
+  scope :physical, -> { where("CUSTCATKEY NOT IN (4,5,6)") }
+
+  has_many :faxes,          class_name: 'Bs::CustomerFax',   foreign_key: :custkey
   belongs_to :address,      class_name: 'Bs::Address',       foreign_key: :premisekey
   has_one    :taxid,        class_name: 'Bs::CustomerId',    foreign_key: :custkey
   belongs_to :send_address, class_name: 'Billing::Address',       foreign_key: :sendkey
@@ -40,7 +45,7 @@ class Bs::Customer < ActiveRecord::Base
      reason = 'payment'
     end
 
-    outage = Bs::OutageJournalCust.where(custkey_customer: self.custkey).open.accepted.any?
+    outage = Bs::OutageJournalCust.where(custkey_customer: self.custkey).open.accepted.first
     if outage.present?
     # if outage.present? && outage.detail.present?
     #   if outage.detail.enabled != 1 || outage.detail.on_time.blank?
@@ -50,6 +55,13 @@ class Bs::Customer < ActiveRecord::Base
     end
 
     return [status, reason]
+  end
+
+  def due_date
+    due_date = ""
+    bill_notif = Bs::CustomerBillNotification.where(accnumb: self.accnumb).first || Bs::CustomerBillNotificationPrev.where(accnumb: self.accnumb).first
+    due_date = bill_notif.lastday if bill_notif.present?
+    due_date
   end
 
   def abonent_type
@@ -195,6 +207,21 @@ class Bs::Customer < ActiveRecord::Base
       a = self.custname.to_ka
     end
     "#{self.accnumb.to_ka} -- #{a}"
+  end
+
+  def to_hash
+    status, message = self.status
+    {   subscriberID: self.accnumb,
+        currentStatus: status ? 1 : -1,
+        balance: (self.payable_balance * 100).to_i,
+        dueDate:  self.due_date,
+        message: message,
+        address: self.address.region.address,
+        phoneNumber: [ self.address.region.phone || '' ],
+        webAddress: TELASI_WEB_SITE,
+        mainNumber: self.fax,
+        alternativeNumber: self.faxes.n_status.map{ |x| x.fax }
+    }
   end
 
 private

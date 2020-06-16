@@ -1,3 +1,4 @@
+# -*- encoding : utf-8 -*-
 class ServiceController < ApplicationController
 
  SMS_ON = 1
@@ -11,17 +12,17 @@ class ServiceController < ApplicationController
  def getSubscriberByPhone
  	phoneNumber = params["phoneNumber"] || ''
  	raise Error::SubscriberNotFoundError.new unless valid?(phoneNumber)
- 	customers = Bs::Customer.where(fax: phoneNumber)
- 	customer_faxs = Bs::CustomerFax.where('SUBSTR(parent_fax, -9, 9) = ?', phoneNumber)
+ 	customers = Bs::Customer.physical.where(fax: phoneNumber)
+ 	customer_faxs = Bs::CustomerFax.where('MESSAGE_STATUS = ? AND SUBSTR(fax, -9, 9) = ?', MESSAGE_STATUS, phoneNumber)
 	if customers.present? || customer_faxs.present?
 		renderedJson = { subscribers: [] }
 		customers.each do |customer|
-			renderedJson[:subscribers] << customer_hash(customer)
+			renderedJson[:subscribers] << customer.to_hash
 		end
 		customer_faxs.each do |customer_fax|
 			customer = Bs::Customer.find(customer_fax.custkey)
 			next if renderedJson[:subscribers].find{ |x| x[:subscriberID] == customer.accnumb }.present?
-			renderedJson[:subscribers] << customer_hash(customer)
+			renderedJson[:subscribers] << customer.to_hash
 		end
 	 	render json: renderedJson
 	else
@@ -34,7 +35,7 @@ class ServiceController < ApplicationController
  	raise Error::SubscriberNotFoundError.new unless valid?(phoneNumber)
 
  	subscriberID = @jsonBody["subscriberID"]
- 	customer = Bs::Customer.where(accnumb: subscriberID).first
+ 	customer = Bs::Customer.physical.where(accnumb: subscriberID).first
  	raise "Customer not found" if customer.blank?
  	updateFaxAndSender(customer, phoneNumber)
  	ActiveRecord::Base.connection.execute("BEGIN sms.sms_pack.send__bill_notif_sms_proc_ussd('#{subscriberID}', '#{phoneNumber}'); end;")
@@ -43,9 +44,8 @@ class ServiceController < ApplicationController
 
  def getServiceSuspendReason
  	subscriberID = @jsonBody["subscriberID"]
- 	raise Error::SubscriberNotFoundError.new unless in_subscriber_whitelist(subscriberID)
 
- 	customer = Bs::Customer.where(accnumb: subscriberID).first
+ 	customer = Bs::Customer.physical.where(accnumb: subscriberID).first
  	raise "Customer not found" if customer.blank?
  	render json: { subscriberID: subscriberID,
 				   message: customer.status[1] }
@@ -56,7 +56,7 @@ class ServiceController < ApplicationController
  	raise Error::SubscriberNotFoundError.new unless valid?(phoneNumber)
 
  	subscriberID = @jsonBody["subscriberID"]
- 	customer = Bs::Customer.where(accnumb: subscriberID).first
+ 	customer = Bs::Customer.physical.where(accnumb: subscriberID).first
  	raise "Customer not found" if customer.blank?
  	updateFaxAndSendLast(customer, phoneNumber)
  	render json: { errorCode: 0 }
@@ -64,9 +64,8 @@ class ServiceController < ApplicationController
 
  def getCompanyContacts
  	subscriberID = @jsonBody["subscriberID"]
- 	raise Error::SubscriberNotFoundError.new unless in_subscriber_whitelist(subscriberID)
 
- 	customer = Bs::Customer.where(accnumb: subscriberID).first
+ 	customer = Bs::Customer.physical.where(accnumb: subscriberID).first
  	raise "Customer not found" if customer.blank?
  	render json: { address: 	customer.address.region.address,
  				   phoneNumber: customer.address.region.phone,
@@ -79,7 +78,7 @@ class ServiceController < ApplicationController
 
  	subscriberID = @jsonBody["subscriberID"]
  	personalID = @jsonBody["personalID"]
- 	customer = Bs::Customer.where(accnumb: subscriberID).first
+ 	customer = Bs::Customer.physical.where(accnumb: subscriberID).first
  	if customer.blank?
  		render json: { errorCode: -1,
 			   	       errorMessage: "" }
@@ -94,12 +93,14 @@ class ServiceController < ApplicationController
 								  status:  	  'A',
 								  enter_date: Time.now).save
 
- 		# fax = Bs::CustomerFax.where('SUBSTR(fax, -9, 9) = ?', phoneNumber)
- 		# Bs::CustomerFax.new(custkey:    customer.custkey,
- 		# 					fax:        "995#{phoneNumber}",
- 		# 					parent_fax: customer.fax ).save if fax.blank?
-
- 		customer.update_attributes!(fax: phoneNumber)
+ 		if customer.fax.blank?
+ 		  	customer.update_attributes!(fax: phoneNumber) 
+ 		else
+			fax = Bs::CustomerFax.where('SUBSTR(fax, -9, 9) = ? AND parent_fax = ?', phoneNumber, customer.fax)
+ 			Bs::CustomerFax.new(custkey:    customer.custkey,
+ 							fax:        "995#{phoneNumber}",
+ 							parent_fax: customer.fax ).save if fax.blank?
+ 		end
  		
  		render json: { errorCode: 0,
 			   	       errorMessage: "" }
@@ -111,7 +112,7 @@ class ServiceController < ApplicationController
 	#raise Error::SubscriberNotFoundError.new unless valid?(phoneNumber)
 
  	subscriberID = @jsonBody["subscriberID"]
- 	customer = Bs::Customer.where(accnumb: subscriberID).first
+ 	customer = Bs::Customer.physical.where(accnumb: subscriberID).first
  	raise "Customer not found" if customer.blank?
  	customerFax = Bs::CustomerFax.where('SUBSTR(fax, -9, 9) = ? and CUSTKEY = ?', phoneNumber, customer.custkey).first
 	customerFax.update_attributes!(message_status: 'C') if customerFax.present?
@@ -119,13 +120,15 @@ class ServiceController < ApplicationController
  	ceb.update_attributes!(sms: SMS_OFF) if ceb.present?
  	cc = Bs::CustomerCandidate.where(accnumb: subscriberID).first
  	cc.update_attributes!(status: 'D') if cc.present?
+
+ 	render json: { errorCode: 0,
+			   	   errorMessage: "" }
  end
 
  def getSubscriberContactPhones
  	subscriberID = @jsonBody["subscriberID"]
- 	raise Error::SubscriberNotFoundError.new unless in_subscriber_whitelist(subscriberID)
 
- 	customer = Bs::Customer.where(accnumb: subscriberID).first
+ 	customer = Bs::Customer.physical.where(accnumb: subscriberID).first
  	raise "Customer not found" if customer.blank?
  	render json: { errorCode: 0,
  				   mainNumber: customer.fax,
@@ -135,9 +138,8 @@ class ServiceController < ApplicationController
 
  def getMeterList
  	subscriberID = @jsonBody["subscriberID"]
- 	raise Error::SubscriberNotFoundError.new unless in_subscriber_whitelist(subscriberID)
 
- 	customer = Bs::Customer.where(accnumb: subscriberID).first
+ 	customer = Bs::Customer.physical.where(accnumb: subscriberID).first
  	raise "Customer not found" if customer.blank?
 
  	render json: { meterList: Bs::Account.where(custkey: customer.custkey).map{ |x| x.mtnumb }.to_a,
@@ -149,7 +151,7 @@ class ServiceController < ApplicationController
 	raise Error::SubscriberNotFoundError.new unless valid?(phoneNumber)
 
  	subscriberID = @jsonBody["subscriberID"]
- 	customer = Bs::Customer.where(accnumb: subscriberID).first
+ 	customer = Bs::Customer.physical.where(accnumb: subscriberID).first
  	raise "Customer not found" if customer.blank?
 
  	meterID = @jsonBody["meterID"]
@@ -179,7 +181,7 @@ class ServiceController < ApplicationController
  	raise Error::SubscriberNotFoundError.new unless valid?(phoneNumber)
 
  	subscriberID = @jsonBody["subscriberID"]
- 	customer = Bs::Customer.where(accnumb: subscriberID).first
+ 	customer = Bs::Customer.physical.where(accnumb: subscriberID).first
  	raise "Customer not found" if customer.blank?
 
  	address = @jsonBody["address"].strip
@@ -223,26 +225,8 @@ class ServiceController < ApplicationController
  end
 
  def in_subscriber_whitelist(subscriber)
- 	customer = Bs::Customer.where(accnumb: subscriber).first
+ 	customer = Bs::Customer.physical.where(accnumb: subscriber).first
  	customer.present? && customer.fax.present? && in_whitelist(customer.fax)
- end
-
- def customer_hash(customer)
- 	due_date = ""
- 	bill_notif = Bs::CustomerBillNotification.where(accnumb: customer.accnumb).first
- 	due_date = bill_notif.lastday if bill_notif.present?
- 	status, message = customer.status
-	{ 	subscriberID: customer.accnumb,
-	    currentStatus: status ? 1 : -1,
-	    balance: (customer.payable_balance * -100).to_i,
-	    dueDate:  due_date,
-	    message: message,
-	    address: customer.address.region.address,
-	    phoneNumber: [ customer.address.region.phone || '' ],
-	    webAddress: TELASI_WEB_SITE,
-	    mainNumber: customer.fax,
-	    alternativeNumber: Bs::CustomerFax.where(parent_fax: customer.fax).map{ |x| x.fax }
-	}
  end
 
  def updateFaxAndSender(customer, phoneNumber)
