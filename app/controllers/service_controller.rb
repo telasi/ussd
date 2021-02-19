@@ -170,7 +170,6 @@ class ServiceController < ApplicationController
 									     fax:        customer.fax,
 									     status:  	 'U',
 									     enter_date: Date.today)
-	   debugger
 	   cc.save
  	end
  	render json: { errorCode: 0 }
@@ -258,6 +257,7 @@ class ServiceController < ApplicationController
 		 						  sender_mobile:   mobile,
 		 						  text: 		   '111',
 		 						  receiver_mobile: RECEIVER_MOBILE,
+		 						  sent_at:         Time.now.strftime('%Y-%m-%d %H:%M:%S'), 
 		 						  # message_type:    LAST_MESSAGE, 
 		 						  message_status:  MESSAGE_STATUS )
 	 	sms.save
